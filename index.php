@@ -1,67 +1,21 @@
 <?php
-// index.php
-include 'db.php'; // Includes database connection and starts session
+include 'db.php';
 
-// Fetch products from the database to display on the homepage
-// We'll limit it to the latest 8 products for this example
+$category = $_GET['cat'] ?? 'male';
+$category = in_array($category, ['male', 'female']) ? $category : 'male';
+
 $products = [];
-$errorMsg = '';
-try {
-    $sql = "SELECT id, brand, price, image, description FROM products ORDER BY id DESC LIMIT 8";
-    $result = $conn->query($sql);
+$sql = "SELECT id, name, price, image, description FROM products WHERE category = ? ORDER BY id DESC LIMIT 8";
+$stmt = $conn->prepare($sql);
+if ($stmt) {
+    $stmt->bind_param("s", $category);
+    $stmt->execute();
+    $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
         $products[] = $row;
     }
-} catch (mysqli_sql_exception $e) {
-    // If the 'brand' column (or others) don't exist, try to detect available columns
-    try {
-        $colsRes = $conn->query("SHOW COLUMNS FROM products");
-        $cols = [];
-        while ($c = $colsRes->fetch_assoc()) {
-            $cols[] = $c['Field'];
-        }
-
-        // Decide which fields to select based on availability
-        $select = [];
-        if (in_array('id', $cols)) {
-            $select[] = 'id';
-        }
-
-        // Choose a name/title field
-        $nameField = null;
-        foreach (['brand', 'name', 'title', 'product_name'] as $f) {
-            if (in_array($f, $cols)) { $nameField = $f; $select[] = $f; break; }
-        }
-
-        // Price
-        foreach (['price', 'cost'] as $f) {
-            if (in_array($f, $cols)) { $select[] = $f; break; }
-        }
-
-        // Image
-        foreach (['image', 'img', 'image_url', 'photo'] as $f) {
-            if (in_array($f, $cols)) { $select[] = $f; break; }
-        }
-
-        // Description
-        foreach (['description', 'desc', 'details'] as $f) {
-            if (in_array($f, $cols)) { $select[] = $f; break; }
-        }
-
-        if (count($select) > 0) {
-            // Build and run a safe SELECT using the available columns
-            $safeCols = array_map(function($c){ return "`" . str_replace("`","",$c) . "`"; }, $select);
-            $sql2 = "SELECT " . implode(', ', $safeCols) . " FROM products ORDER BY id DESC LIMIT 8";
-            $res2 = $conn->query($sql2);
-            while ($row = $res2->fetch_assoc()) {
-                $products[] = $row;
-            }
-        } else {
-            $errorMsg = 'Products table exists but has no expected columns (brand/name/price/image/description).';
-        }
-    } catch (mysqli_sql_exception $e2) {
-        $errorMsg = 'Database error: ' . htmlspecialchars($e2->getMessage());
-    }
+} else {
+    $errorMsg = "Database error: " . htmlspecialchars($conn->error);
 }
 ?>
 
@@ -137,6 +91,37 @@ try {
             <p>No products found.</p>
         <?php endif; ?>
     </div>
+</nav>
+
+<div class="hero">
+    <h1>MTP Store</h1>
+    <p>Quality clothing for everyone.</p>
+</div>
+
+<div class="container">
+    <?php if (isset($errorMsg)): ?>
+        <p style="color:red"><?= $errorMsg ?></p>
+    <?php endif; ?>
+
+    <?php if ($products): ?>
+        <div class="products-grid">
+            <?php foreach ($products as $p): ?>
+                <div class="product-card">
+                    <?php if ($p['image']): ?>
+                        <img src="<?= htmlspecialchars($p['image']) ?>" alt="<?= htmlspecialchars($p['name']) ?>">
+                    <?php endif; ?>
+                    <h3><?= htmlspecialchars($p['name']) ?></h3>
+                    <div class="price">$<?= number_format($p['price'], 2) ?></div>
+                    <?php if ($p['description']): ?>
+                        <p><?= htmlspecialchars($p['description']) ?></p>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php else: ?>
+        <p>No products found.</p>
+    <?php endif; ?>
+</div>
 
 </body>
 </html>
